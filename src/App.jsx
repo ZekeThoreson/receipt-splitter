@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2 } from 'lucide-react';
 
-export default function App() {
+export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
   const [people, setPeople] = useState([]);
   const [itemName, setItemName] = useState('');
@@ -18,9 +18,25 @@ export default function App() {
   const [expandedPeople, setExpandedPeople] = useState({});
   const [adjustingItem, setAdjustingItem] = useState(null);
   const [percentages, setPercentages] = useState({});
+  const [venmoUsername, setVenmoUsername] = useState('');
+  const [showVenmoError, setShowVenmoError] = useState(false);
 
   // Sort people alphabetically
   const sortedPeople = [...people].sort((a, b) => a.name.localeCompare(b.name));
+
+  // Load Venmo username from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('organizerVenmoUsername');
+    if (saved) {
+      setVenmoUsername(saved);
+    }
+  }, []);
+
+  // Save Venmo username to localStorage whenever it changes
+  const handleVenmoUsernameChange = (value) => {
+    setVenmoUsername(value);
+    localStorage.setItem('organizerVenmoUsername', value);
+  };
 
   const addItem = () => {
     if (itemName.trim() && itemPrice) {
@@ -113,6 +129,7 @@ export default function App() {
     const newPercentages = { ...percentages };
     newPercentages[personId] = newValue;
     
+    // Distribute remaining percentage among others
     const remaining = 100 - newValue;
     const numOthers = otherPeople.length;
     
@@ -187,6 +204,7 @@ export default function App() {
       };
     });
     
+    // Calculate total subtotal for proportional splits
     const totalSubtotal = Object.values(totals).reduce((sum, p) => sum + p.subtotal, 0);
     
     if (totalSubtotal > 0) {
@@ -243,17 +261,41 @@ export default function App() {
     
     sortedPeople.forEach(person => {
       const total = totals[person.id];
-      message += `${total.name}: $${total.total.toFixed(2)}\n`;
+      message += `${total.name}: ${total.total.toFixed(2)}\n`;
     });
     
     const totalAmount = parseFloat(items.reduce((sum, item) => sum + item.price, 0)) + parseFloat(tax || 0) + parseFloat(tip || 0);
-    message += `\nTotal: $${totalAmount.toFixed(2)}`;
+    message += `\nTotal: ${totalAmount.toFixed(2)}`;
     
     if (navigator.share) {
       navigator.share({ text: message });
     } else {
       navigator.clipboard.writeText(message);
       alert('Totals copied to clipboard!');
+    }
+  };
+
+  const sharePersonTotal = (person, amount) => {
+    if (!venmoUsername || venmoUsername.trim() === '') {
+      setShowVenmoError(true);
+      return;
+    }
+
+    const venmoLink = `https://venmo.com/${venmoUsername.trim()}?txn=pay&amount=${amount.toFixed(2)}`;
+    const message = `Hey ${person.name}! Could you Venmo me ${amount.toFixed(2)} for our receipt split?\n\n${venmoLink}\n\n- Sent via Receipt Splitter`;
+    
+    if (navigator.share) {
+      navigator.share({ 
+        text: message,
+        title: 'Receipt Split Payment Request'
+      }).catch((error) => {
+        // User cancelled or share failed
+        console.log('Share cancelled or failed:', error);
+      });
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(message);
+      alert('Payment request copied to clipboard!');
     }
   };
 
@@ -277,16 +319,25 @@ export default function App() {
               
               return (
                 <div key={person.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => toggleExpanded(person.id)}
-                    className="w-full p-4 flex items-center justify-between bg-white hover:bg-gray-50 transition-colors"
-                  >
+                  <div className="w-full p-4 flex items-center justify-between bg-white">
                     <span className="font-semibold text-gray-800">{total.name}</span>
                     <div className="flex items-center gap-3">
                       <span className="text-lg font-bold text-indigo-600">${total.total.toFixed(2)}</span>
-                      {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      <button
+                        onClick={() => sharePersonTotal(person, total.total)}
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        title="Share payment request"
+                      >
+                        <Share2 size={20} />
+                      </button>
+                      <button
+                        onClick={() => toggleExpanded(person.id)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </button>
                     </div>
-                  </button>
+                  </div>
                   
                   {isExpanded && (
                     <div className="p-4 bg-gray-50 border-t border-gray-200">
@@ -357,6 +408,7 @@ export default function App() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">Receipt Splitter</h1>
         
+        {/* Warning Modal */}
         {showWarning && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
@@ -386,6 +438,35 @@ export default function App() {
           </div>
         )}
 
+        {/* Venmo Username Error Modal */}
+        {showVenmoError && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
+              <div className="flex items-center gap-3 mb-4">
+                <AlertCircle className="text-red-500" size={32} />
+                <h2 className="text-xl font-bold text-gray-800">Venmo Username Required</h2>
+              </div>
+              <p className="text-gray-700 mb-4">
+                Please enter your Venmo username to share payment requests
+              </p>
+              <input
+                type="text"
+                placeholder="Your Venmo username"
+                value={venmoUsername}
+                onChange={(e) => handleVenmoUsernameChange(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4"
+              />
+              <button
+                onClick={() => setShowVenmoError(false)}
+                className="w-full py-2 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Adjust Percentages Modal */}
         {adjustingItem && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto">
@@ -432,6 +513,7 @@ export default function App() {
           </div>
         )}
         
+        {/* Add People Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add People</h2>
           <div className="flex gap-2 mb-4">
@@ -495,6 +577,7 @@ export default function App() {
           </div>
         </div>
         
+        {/* Add Items Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Items</h2>
           <div className="flex gap-2">
@@ -524,6 +607,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* Items List */}
         {items.length > 0 && (
           <div className="bg-white rounded-xl shadow-md p-6 mb-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Items</h2>
@@ -547,6 +631,7 @@ export default function App() {
                       </button>
                     </div>
                     
+                    {/* Person Chips */}
                     {sortedPeople.length > 0 && (
                       <div className="mb-3">
                         {item.claimedBy.length > 1 && (
@@ -583,6 +668,7 @@ export default function App() {
                       </div>
                     )}
                     
+                    {/* Claimed by list */}
                     {item.claimedBy.length > 0 && (
                       <div className="mt-3 pl-4 space-y-1 border-t border-gray-200 pt-3">
                         {item.claimedBy.map(claim => {
@@ -604,6 +690,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Tax and Tip */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Tax & Tip</h2>
           <div className="space-y-4">
@@ -642,9 +729,23 @@ export default function App() {
                 <option value="equal">Split Equally</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Your Venmo Username <span className="text-xs text-gray-500">(dev feature)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="username"
+                value={venmoUsername}
+                onChange={(e) => handleVenmoUsernameChange(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
           </div>
         </div>
 
+        {/* View Summary Button */}
         {items.length > 0 && people.length > 0 && (
           <button
             onClick={goToSummary}
