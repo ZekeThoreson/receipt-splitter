@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camera, Upload, X } from 'lucide-react';
 
 export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
@@ -20,6 +20,11 @@ export default function ReceiptSplitterApp() {
   const [percentages, setPercentages] = useState({});
   const [venmoUsername, setVenmoUsername] = useState('');
   const [showVenmoError, setShowVenmoError] = useState(false);
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
+  const [receiptImage, setReceiptImage] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   // Sort people alphabetically
   const sortedPeople = [...people].sort((a, b) => a.name.localeCompare(b.name));
@@ -299,6 +304,50 @@ export default function ReceiptSplitterApp() {
     }
   };
 
+  const handleImageCapture = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setReceiptImage(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const openCamera = () => {
+    cameraInputRef.current?.click();
+  };
+
+  const openFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const retakePhoto = () => {
+    setReceiptImage(null);
+    setShowReceiptScanner(true);
+  };
+
+  const closeScanner = () => {
+    setShowReceiptScanner(false);
+    setReceiptImage(null);
+  };
+
+  const processReceipt = async () => {
+    if (!receiptImage) return;
+    
+    setIsProcessing(true);
+    
+    // TODO: Phase 2 - Add Tesseract.js OCR here
+    // For now, just simulate processing
+    setTimeout(() => {
+      setIsProcessing(false);
+      setReceiptImage(null);
+      setShowReceiptScanner(false);
+      alert('OCR processing will be added in Phase 2!');
+    }, 2000);
+  };
+
   if (showSummary) {
     const totals = calculateTotals();
     const grandTotal = items.reduce((sum, item) => sum + item.price, 0) + parseFloat(tax || 0) + parseFloat(tip || 0);
@@ -466,6 +515,96 @@ export default function ReceiptSplitterApp() {
           </div>
         )}
 
+        {/* Receipt Scanner Modal */}
+        {showReceiptScanner && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-800">Scan Receipt</h2>
+                <button
+                  onClick={closeScanner}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              {!receiptImage ? (
+                <div className="space-y-4">
+                  <p className="text-gray-600 text-center mb-6">
+                    Take a photo or upload an image of your receipt
+                  </p>
+                  
+                  <button
+                    onClick={openCamera}
+                    className="w-full py-4 px-6 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-3"
+                  >
+                    <Camera size={24} />
+                    Take Photo
+                  </button>
+                  
+                  <button
+                    onClick={openFileUpload}
+                    className="w-full py-4 px-6 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-3"
+                  >
+                    <Upload size={24} />
+                    Upload Photo
+                  </button>
+                  
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImageCapture}
+                    className="hidden"
+                  />
+                  
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageCapture}
+                    className="hidden"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative">
+                    <img
+                      src={receiptImage}
+                      alt="Receipt preview"
+                      className="w-full max-h-96 object-contain rounded-lg border-2 border-gray-200"
+                    />
+                  </div>
+                  
+                  {isProcessing ? (
+                    <div className="text-center py-4">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
+                      <p className="text-gray-600 font-medium">Processing...</p>
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={retakePhoto}
+                        className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                      >
+                        Retake
+                      </button>
+                      <button
+                        onClick={processReceipt}
+                        className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                      >
+                        Use This Photo
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Adjust Percentages Modal */}
         {adjustingItem && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -523,13 +662,14 @@ export default function ReceiptSplitterApp() {
               value={personName}
               onChange={(e) => setPersonName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addPerson()}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
             />
             <button
               onClick={addPerson}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center shrink-0"
+              title="Add person"
             >
-              <Plus size={20} /> Add
+              <Plus size={20} />
             </button>
           </div>
           
@@ -580,6 +720,16 @@ export default function ReceiptSplitterApp() {
         {/* Add Items Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Items</h2>
+          
+          {/* Scan Receipt Button */}
+          <button
+            onClick={() => setShowReceiptScanner(true)}
+            className="w-full mb-4 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Camera size={20} />
+            Scan Receipt
+          </button>
+          
           <div className="flex gap-2">
             <input
               type="text"
