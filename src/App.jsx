@@ -737,22 +737,23 @@ export default function ReceiptSplitterApp() {
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && itemPrice && addItem()}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
             />
             <input
               type="number"
-              placeholder="Price"
+              placeholder="$"
               value={itemPrice}
               onChange={(e) => setItemPrice(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && itemName && addItem()}
               step="0.01"
-              className="w-28 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="w-20 shrink-0 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
             />
             <button
               onClick={addItem}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+              className="w-10 h-10 shrink-0 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center"
+              title="Add item"
             >
-              <Plus size={20} /> Add
+              <Plus size={20} />
             </button>
           </div>
         </div>
