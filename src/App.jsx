@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camera, Upload, X } from 'lucide-react';
+import ReactGA from 'react-ga4';
 
 export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
@@ -31,11 +32,31 @@ export default function ReceiptSplitterApp() {
   const [showRawText, setShowRawText] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [showScanTips, setShowScanTips] = useState(true);
+  const [processingMethod, setProcessingMethod] = useState('');
   const [parsedItems, setParsedItems] = useState([]);
   const [extractedTax, setExtractedTax] = useState('');
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const workerRef = useRef(null);
+
+  // Initialize Google Analytics
+  useEffect(() => {
+    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID || 'G-2J1Y4LT9CE';
+    ReactGA.initialize(measurementId);
+    // Track initial page view
+    ReactGA.send({ hitType: "pageview", page: "/", title: "Main Screen" });
+  }, []);
+
+  // Track when summary is viewed
+  useEffect(() => {
+    if (showSummary) {
+      ReactGA.send({ hitType: "pageview", page: "/summary", title: "Summary Screen" });
+      ReactGA.event({
+        category: 'User',
+        action: 'summary_viewed'
+      });
+    }
+  }, [showSummary]);
 
   // Sort people alphabetically
   const sortedPeople = [...people].sort((a, b) => a.name.localeCompare(b.name));
@@ -66,6 +87,13 @@ export default function ReceiptSplitterApp() {
         }]);
         setItemName('');
         setItemPrice('');
+        
+        // Track item added
+        ReactGA.event({
+          category: 'User',
+          action: 'item_added',
+          label: 'Manual Entry'
+        });
       }
     }
   };
@@ -78,6 +106,12 @@ export default function ReceiptSplitterApp() {
     if (personName.trim()) {
       setPeople([...people, { id: Date.now(), name: personName.trim() }]);
       setPersonName('');
+      
+      // Track person added
+      ReactGA.event({
+        category: 'User',
+        action: 'person_added'
+      });
     }
   };
 
@@ -637,10 +671,125 @@ export default function ReceiptSplitterApp() {
     setIsProcessing(true);
     setOcrProgress(0);
     setOcrError('');
+    setProcessingMethod('Veryfi');
+    
+    try {
+      // Try Veryfi first
+      const veryfiResult = await processWithVeryfi(receiptImage);
+      
+      if (veryfiResult && veryfiResult.line_items && veryfiResult.line_items.length > 0) {
+        // Veryfi succeeded
+        const items = parseVeryfiResponse(veryfiResult);
+        const tax = veryfiResult.tax?.toString() || '';
+        
+        // Add items directly
+        const newItems = items.map(item => ({
+          id: Date.now() + Math.random(),
+          name: item.name,
+          price: item.price,
+          claimedBy: []
+        }));
+        
+        setItems(prevItems => [...prevItems, ...newItems]);
+        
+        // Auto-fill tax
+        if (tax) {
+          setTax(tax);
+        }
+        
+        setIsProcessing(false);
+        setShowReceiptScanner(false);
+        setReceiptImage(null);
+        
+        // Track successful receipt scan
+        ReactGA.event({
+          category: 'User',
+          action: 'receipt_scanned',
+          label: 'Veryfi Success',
+          value: newItems.length
+        });
+        
+      } else {
+        // Veryfi failed, fallback to Tesseract
+        console.log('Veryfi failed, falling back to Tesseract');
+        await processWithTesseract(receiptImage);
+      }
+      
+    } catch (error) {
+      console.error('Veryfi Error:', error);
+      // Fallback to Tesseract
+      await processWithTesseract(receiptImage);
+    }
+  };
+
+  const processWithVeryfi = async (imageData) => {
+    setOcrProgress(25);
+    
+    // Convert base64 to blob
+    const response = await fetch(imageData);
+    const blob = await response.blob();
+    
+    setOcrProgress(50);
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', blob, 'receipt.jpg');
+    
+    const clientId = import.meta.env.VITE_VERYFI_CLIENT_ID;
+    const username = import.meta.env.VITE_VERYFI_USERNAME;
+    const apiKey = import.meta.env.VITE_VERYFI_API_KEY;
+    
+    if (!clientId || !username || !apiKey) {
+      throw new Error('Veryfi credentials not configured');
+    }
+    
+    setOcrProgress(75);
+    
+    // Call Veryfi API
+    const veryfiResponse = await fetch('https://api.veryfi.com/api/v8/partner/documents', {
+      method: 'POST',
+      headers: {
+        'CLIENT-ID': clientId,
+        'AUTHORIZATION': `apikey ${username}:${apiKey}`,
+        'Accept': 'application/json',
+      },
+      body: formData
+    });
+    
+    setOcrProgress(100);
+    
+    if (!veryfiResponse.ok) {
+      throw new Error('Veryfi API request failed');
+    }
+    
+    return await veryfiResponse.json();
+  };
+
+  const parseVeryfiResponse = (veryfiData) => {
+    const items = [];
+    
+    if (veryfiData.line_items && Array.isArray(veryfiData.line_items)) {
+      veryfiData.line_items.forEach(item => {
+        if (item.description && item.total) {
+          items.push({
+            name: item.description.trim(),
+            price: parseFloat(item.total),
+            quantity: item.quantity || 1
+          });
+        }
+      });
+    }
+    
+    return items;
+  };
+
+  const processWithTesseract = async (imageData) => {
+    setProcessingMethod('Tesseract (fallback)');
+    setOcrProgress(0);
     
     try {
       // Preprocess image
-      const preprocessedImage = await preprocessImage(receiptImage);
+      const preprocessedImage = await preprocessImage(imageData);
       
       // Create worker
       workerRef.current = new Worker('/ocr-worker.js');
@@ -670,7 +819,7 @@ export default function ReceiptSplitterApp() {
       workerRef.current.postMessage({ image: preprocessedImage });
       
     } catch (error) {
-      console.error('OCR Error:', error);
+      console.error('Tesseract Error:', error);
       setOcrError('Failed to process receipt. Please try again or add items manually.');
       setIsProcessing(false);
     }
@@ -1042,7 +1191,7 @@ export default function ReceiptSplitterApp() {
                           style={{ width: `${ocrProgress}%` }}
                         ></div>
                       </div>
-                      <p className="text-gray-600 font-medium">Processing... {ocrProgress}%</p>
+                      <p className="text-gray-600 font-medium">Processing with {processingMethod}... {ocrProgress}%</p>
                       <button
                         onClick={cancelProcessing}
                         className="mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 underline"
@@ -1270,14 +1419,8 @@ export default function ReceiptSplitterApp() {
                         </div>
                       </div>
                       <button
-                        onClick={() => startEditItem(item)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors ml-4"
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                      <button
                         onClick={() => deleteItem(item.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-4"
                         title="Delete item"
                       >
                         <Trash2 size={20} />

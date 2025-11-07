@@ -10,9 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@veryfi/veryfi-sdk": "^1.4.6",
     "lucide-react": "^0.544.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-ga4": "^2.1.0",
     "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
