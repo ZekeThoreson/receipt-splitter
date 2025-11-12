@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camer
 import ReactGA from 'react-ga4';
 
 console.log('Vite env:', import.meta.env);
+console.log('Vite env:', import.meta.env.VITE_TEST_VAR);
 console.log('Veryfi client id:', import.meta.env.VITE_VERYFI_CLIENT_ID);
 console.log('Veryfi username:', import.meta.env.VITE_VERYFI_USERNAME);
 console.log('Veryfi api key:', import.meta.env.VITE_VERYFI_API_KEY);
