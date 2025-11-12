@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camera, Upload, X } from 'lucide-react';
 import ReactGA from 'react-ga4';
 
+console.log('Vite env:', import.meta.env);
+console.log('Veryfi client id:', import.meta.env.VITE_VERYFI_CLIENT_ID);
+console.log('Veryfi username:', import.meta.env.VITE_VERYFI_USERNAME);
+console.log('Veryfi api key:', import.meta.env.VITE_VERYFI_API_KEY);
+
 export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
   const [people, setPeople] = useState([]);
