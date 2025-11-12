@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camera, Upload, X } from 'lucide-react';
 import ReactGA from 'react-ga4';
+const { processTheReceipt } = require("./ocr-receipt");
 
 export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
@@ -38,6 +39,7 @@ export default function ReceiptSplitterApp() {
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const workerRef = useRef(null);
+
 
   // Initialize Google Analytics
   useEffect(() => {
