@@ -16,9 +16,9 @@ export default async function handler(req, res) {
       }
   
       // 2. Read Veryfi credentials from server-side env
-      const clientId = process.env.VITE_VERYFI_CLIENT_ID?.trim();
-      const username = process.env.VITE_VERYFI_USERNAME?.trim();
-      const apiKey   = process.env.VITE_VERYFI_API_KEY?.trim();
+      const clientId = process.env.VERYFI_CLIENT_ID?.trim();
+      const username = process.env.VERYFI_USERNAME?.trim();
+      const apiKey   = process.env.VERYFI_API_KEY?.trim();      
   
       if (!clientId || !username || !apiKey) {
         console.error('Veryfi credentials missing on server', {

@@ -4,9 +4,9 @@
 require('dotenv').config();
 
 // 2. Normalize / trim Veryfi credentials
-const clientId = process.env.VITE_VERYFI_CLIENT_ID?.trim();
-const username = process.env.VITE_VERYFI_USERNAME?.trim();
-const apiKey   = process.env.VITE_VERYFI_API_KEY?.trim();
+const clientId = process.env.VERYFI_CLIENT_ID?.trim();
+const username = process.env.VERYFI_USERNAME?.trim();
+const apiKey   = process.env.VERYFI_API_KEY?.trim();
 
 // Debug print to confirm server has them
 if (import.meta.env.DEV) {
