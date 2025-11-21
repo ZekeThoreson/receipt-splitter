@@ -1,12 +1,115 @@
-import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Edit2, ChevronDown, ChevronUp, AlertCircle, Share2, Camera, Upload, X } from 'lucide-react';
+import { AlertCircle, Camera, Edit2, Plus, Trash2, Upload, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react'; 
 import ReactGA from 'react-ga4';
+import SummaryView from './components/SummaryView';
+import { HeroTitle } from './components/HeroTitle';
+import { SplashScreen } from './components/SplashScreen';
+import { LandingHero } from './components/LandingHero'
 
-console.log('Vite env:', import.meta.env);
-console.log('Vite env:', import.meta.env.VITE_TEST_VAR);
-console.log('Veryfi client id:', import.meta.env.VITE_VERYFI_CLIENT_ID);
-console.log('Veryfi username:', import.meta.env.VITE_VERYFI_USERNAME);
-console.log('Veryfi api key:', import.meta.env.VITE_VERYFI_API_KEY);
+// ===============================================
+// DESIGN TOKENS – tweak global colors here easily
+// ===============================================
+const COLORS = {
+  background: '#0A0A0A',      // Main app background
+  textBody: '#EDEDED',        // Soft white body text
+  textHeading: '#FFFFFF',     // Pure white headings
+  accentPrimary: '#FDF701',   // Highlighter yellow – primary
+  accentHover: '#EDE700',     // Slightly darker yellow – hover / secondary
+  borderMuted: '#A6A6A6',     // Grey for borders / dividers
+  danger: '#FF4A4A',          // Destructive actions (delete)
+};
+
+// ==========================
+// UI STYLE HELPERS
+// ==========================
+const primaryButtonClasses =
+  "inline-flex items-center justify-center px-4 py-2 rounded-md font-semibold " +
+  "transition-colors duration-150"; // Animation timing – change duration here
+
+const chipBaseClasses =
+  "px-3 py-1 text-xs font-medium rounded-md border transition-colors duration-150"; // Chip animation timing
+
+const dangerButtonClasses = 
+  "inline-flex items-center justify-center px-3 py-1 rounded-md font-semibold " +
+  "text-white transition-colors duration-150";
+
+// ==========================
+// PAYMENT METHOD ICONS (SVG)
+// Simple brand-inspired icons – replace with official SVG paths later if you want
+// ==========================
+const VenmoIcon = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    aria-hidden="true"
+  >
+    <rect
+      x="2"
+      y="2"
+      width="20"
+      height="20"
+      rx="4"
+      ry="4"
+      fill="#3D95CE"
+    />
+    <path
+      d="M10.2 16.5L7.8 7.5h3l0.9 4.5 2.6-4.5h3.1l-4.7 9H10.2z"
+      fill="#FFFFFF"
+    />
+  </svg>
+);
+
+const ZelleIcon = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    aria-hidden="true"
+  >
+    <rect
+      x="2"
+      y="2"
+      width="20"
+      height="20"
+      rx="4"
+      ry="4"
+      fill="#6C19FF"
+    />
+    <path
+      d="M10 6h5v2.2l-3.2 4.2H15v2H9.1v-2.1l3.1-4.2H10V6z"
+      fill="#FFFFFF"
+    />
+  </svg>
+);
+
+const PaypalIcon = ({ className = '' }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    aria-hidden="true"
+  >
+    <rect
+      x="2"
+      y="2"
+      width="20"
+      height="20"
+      rx="4"
+      ry="4"
+      fill="#003087"
+    />
+    <path
+      d="M10 17l1-6.5c.2-1.3 1.1-2.1 2.5-2.1h2.3c1.1 0 1.9.7 1.7 1.9l-.3 2c-.2 1.3-1.1 2.1-2.5 2.1h-1.7l-.3 1.9H10z"
+      fill="#FFFFFF"
+    />
+  </svg>
+);
+
+if (import.meta.env.DEV) {
+  console.log('Vite env:', import.meta.env);
+  console.log('Vite test:', import.meta.env.VITE_TEST_VAR);
+  console.log('Veryfi client id:', import.meta.env.VITE_VERYFI_CLIENT_ID);
+  console.log('Veryfi username:', import.meta.env.VITE_VERYFI_USERNAME);
+  console.log('Veryfi api key:', import.meta.env.VITE_VERYFI_API_KEY);
+}
 
 export default function ReceiptSplitterApp() {
   const [items, setItems] = useState([]);
@@ -28,14 +131,13 @@ export default function ReceiptSplitterApp() {
   const [editingItemId, setEditingItemId] = useState(null);
   const [editItemName, setEditItemName] = useState('');
   const [editItemPrice, setEditItemPrice] = useState('');
+  const [receiptScanCount, setReceiptScanCount] = useState(0);
   const [venmoUsername, setVenmoUsername] = useState('');
   const [showVenmoError, setShowVenmoError] = useState(false);
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [receiptImage, setReceiptImage] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
-  const [rawOcrText, setRawOcrText] = useState('');
-  const [showRawText, setShowRawText] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [showScanTips, setShowScanTips] = useState(true);
   const [processingMethod, setProcessingMethod] = useState('');
@@ -43,8 +145,8 @@ export default function ReceiptSplitterApp() {
   const [extractedTax, setExtractedTax] = useState('');
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
-  const workerRef = useRef(null);
-
+  const [selectedPayment, setSelectedPayment] = useState('venmo');
+  const [paymentHandle, setPaymentHandle] = useState('');
 
   // Initialize Google Analytics
   useEffect(() => {
@@ -63,7 +165,17 @@ export default function ReceiptSplitterApp() {
         action: 'summary_viewed'
       });
     }
-  }, [showSummary]);
+  }, [showSummary]); 
+
+  const ocrStatusText = (() => {
+    if (!isProcessing) return '';
+
+    if (ocrProgress === 0) return 'Ready to scan';
+    if (ocrProgress <= 25) return 'Uploading image';
+    if (ocrProgress <= 50) return 'Sending to Veryfi';
+    if (ocrProgress < 100) return 'Reading receipt details';
+    return 'Done';
+  })();
 
   // Sort people alphabetically
   const sortedPeople = [...people].sort((a, b) => a.name.localeCompare(b.name));
@@ -171,35 +283,61 @@ export default function ReceiptSplitterApp() {
     setItems(items.map(item => {
       if (item.id === itemId) {
         const alreadyClaimed = item.claimedBy.some(c => c.personId === personId);
-        
+  
         if (alreadyClaimed) {
+          // Person is unclaiming the item
+          const remainingClaims = item.claimedBy.filter(c => c.personId !== personId);
+  
+          // Reset percentages for remaining people so they don't keep stale splits
+          const resetClaims = remainingClaims.map(c => ({
+            ...c,
+            percentage: null,
+          }));
+  
           return {
             ...item,
-            claimedBy: item.claimedBy.filter(c => c.personId !== personId)
+            claimedBy: resetClaims,
           };
         } else {
+          // New claim starts with no custom percentage yet
           return {
             ...item,
-            claimedBy: [...item.claimedBy, { personId, percentage: null }]
+            claimedBy: [...item.claimedBy, { personId, percentage: null }],
           };
         }
       }
       return item;
     }));
   };
+  
 
   const openAdjustPercentages = (item) => {
     const initialPercentages = {};
     const numPeople = item.claimedBy.length;
-    const evenSplit = 100 / numPeople;
-    
-    item.claimedBy.forEach(claim => {
-      initialPercentages[claim.personId] = claim.percentage || evenSplit;
-    });
-    
+  
+    if (numPeople === 0) return;
+  
+    const hasSavedPercentages = item.claimedBy.some(
+      (claim) => claim.percentage !== null && claim.percentage !== undefined
+    );
+  
+    if (hasSavedPercentages) {
+      // Use saved percentages
+      item.claimedBy.forEach((claim) => {
+        initialPercentages[claim.personId] = claim.percentage;
+      });
+    } else {
+      // First time: show an even split
+      const evenSplit = 100 / numPeople;
+      item.claimedBy.forEach((claim) => {
+        initialPercentages[claim.personId] = evenSplit;
+      });
+    }
+  
     setPercentages(initialPercentages);
     setAdjustingItem(item.id);
   };
+  
 
   const updatePercentage = (personId, newValue) => {
     const item = items.find(i => i.id === adjustingItem);
@@ -242,13 +380,23 @@ export default function ReceiptSplitterApp() {
   const calculatePersonCost = (item, personId) => {
     const claim = item.claimedBy.find(c => c.personId === personId);
     if (!claim) return 0;
-    
-    if (claim.percentage !== null) {
+  
+    const numClaimed = item.claimedBy.length;
+  
+    // If only one person is claiming this item, they owe the full amount
+    if (numClaimed === 1) {
+      return item.price;
+    }
+  
+    // If we have a saved percentage, use it
+    if (claim.percentage !== null && claim.percentage !== undefined) {
       return (item.price * claim.percentage) / 100;
     }
-    
-    return item.price / item.claimedBy.length;
+  
+    // Otherwise, split evenly among all claimants
+    return item.price / numClaimed;
   };
+  
 
   const calculateTotals = () => {
     const taxAmount = parseFloat(tax) || 0;
@@ -369,7 +517,9 @@ export default function ReceiptSplitterApp() {
         title: 'Receipt Split Payment Request'
       }).catch((error) => {
         // User cancelled or share failed
-        console.log('Share cancelled or failed:', error);
+        if (import.meta.env.DEV) {
+          console.log('Share cancelled or failed:', error);
+        }
       });
     } else {
       // Fallback: copy to clipboard
@@ -389,254 +539,6 @@ export default function ReceiptSplitterApp() {
     }
   };
 
-  const preprocessImage = (imageData) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // Draw original image
-        ctx.drawImage(img, 0, 0);
-        
-        // Step 1: Edge Detection & Auto-Crop
-        let imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const edgeData = detectReceiptEdges(imageDataObj);
-        
-        if (edgeData) {
-          // Crop to detected receipt area
-          canvas.width = edgeData.width;
-          canvas.height = edgeData.height;
-          ctx.putImageData(edgeData, 0, 0);
-          imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        } else {
-          // Use full image if edge detection fails
-          imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
-        
-        // Step 2: Deskew (straighten image)
-        const deskewedData = deskewImage(imageDataObj);
-        canvas.width = deskewedData.width;
-        canvas.height = deskewedData.height;
-        ctx.putImageData(deskewedData, 0, 0);
-        
-        // Step 3: Convert to grayscale
-        imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imageDataObj.data;
-        
-        for (let i = 0; i < data.length; i += 4) {
-          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-          data[i] = gray;
-          data[i + 1] = gray;
-          data[i + 2] = gray;
-        }
-        
-        ctx.putImageData(imageDataObj, 0, 0);
-        
-        // Step 4: Adaptive thresholding
-        imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const thresholded = adaptiveThreshold(imageDataObj);
-        ctx.putImageData(thresholded, 0, 0);
-        
-        // Step 5: Noise removal
-        imageDataObj = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const denoised = removeNoise(imageDataObj);
-        ctx.putImageData(denoised, 0, 0);
-        
-        resolve(canvas.toDataURL());
-      };
-      img.src = imageData;
-    });
-  };
-
-  const detectReceiptEdges = (imageData) => {
-    // Simple edge detection - finds largest rectangular region
-    const data = imageData.data;
-    const width = imageData.width;
-    const height = imageData.height;
-    
-    // Convert to binary for edge detection
-    const binary = new Uint8ClampedArray(width * height);
-    for (let i = 0; i < data.length; i += 4) {
-      const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-      binary[i / 4] = gray > 128 ? 255 : 0;
-    }
-    
-    // Find bounds (simplified - looks for content edges)
-    let minX = width, maxX = 0, minY = height, maxY = 0;
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x;
-        if (binary[idx] === 0) { // Dark pixel (content)
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    
-    // Add padding
-    const padding = 20;
-    minX = Math.max(0, minX - padding);
-    minY = Math.max(0, minY - padding);
-    maxX = Math.min(width - 1, maxX + padding);
-    maxY = Math.min(height - 1, maxY + padding);
-    
-    const cropWidth = maxX - minX;
-    const cropHeight = maxY - minY;
-    
-    // Only crop if we found reasonable bounds
-    if (cropWidth > width * 0.3 && cropHeight > height * 0.3) {
-      const croppedData = new ImageData(cropWidth, cropHeight);
-      
-      for (let y = 0; y < cropHeight; y++) {
-        for (let x = 0; x < cropWidth; x++) {
-          const srcIdx = ((minY + y) * width + (minX + x)) * 4;
-          const destIdx = (y * cropWidth + x) * 4;
-          croppedData.data[destIdx] = data[srcIdx];
-          croppedData.data[destIdx + 1] = data[srcIdx + 1];
-          croppedData.data[destIdx + 2] = data[srcIdx + 2];
-          croppedData.data[destIdx + 3] = data[srcIdx + 3];
-        }
-      }
-      
-      return croppedData;
-    }
-    
-    return null; // Use original if detection fails
-  };
-
-  const deskewImage = (imageData) => {
-    // Simplified deskew - would need full Hough transform for perfect results
-    // For now, just return original (complex to implement properly)
-    return imageData;
-  };
-
-  const adaptiveThreshold = (imageData) => {
-    const data = imageData.data;
-    const width = imageData.width;
-    const height = imageData.height;
-    const newData = new ImageData(width, height);
-    
-    const blockSize = 25; // Size of local region
-    const C = 10; // Constant subtracted from mean
-    
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        // Calculate local mean
-        let sum = 0;
-        let count = 0;
-        
-        for (let dy = -blockSize; dy <= blockSize; dy++) {
-          for (let dx = -blockSize; dx <= blockSize; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              const idx = (ny * width + nx) * 4;
-              sum += data[idx];
-              count++;
-            }
-          }
-        }
-        
-        const mean = sum / count;
-        const idx = (y * width + x) * 4;
-        const pixel = data[idx];
-        const threshold = mean - C;
-        const value = pixel > threshold ? 255 : 0;
-        
-        newData.data[idx] = value;
-        newData.data[idx + 1] = value;
-        newData.data[idx + 2] = value;
-        newData.data[idx + 3] = 255;
-      }
-    }
-    
-    return newData;
-  };
-
-  const removeNoise = (imageData) => {
-    const data = imageData.data;
-    const width = imageData.width;
-    const height = imageData.height;
-    const newData = new ImageData(width, height);
-    
-    // Median filter for noise removal
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const neighbors = [];
-        
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-              const idx = (ny * width + nx) * 4;
-              neighbors.push(data[idx]);
-            }
-          }
-        }
-        
-        neighbors.sort((a, b) => a - b);
-        const median = neighbors[Math.floor(neighbors.length / 2)];
-        
-        const idx = (y * width + x) * 4;
-        newData.data[idx] = median;
-        newData.data[idx + 1] = median;
-        newData.data[idx + 2] = median;
-        newData.data[idx + 3] = 255;
-      }
-    }
-    
-    return newData;
-  };
-
-  const cleanOcrText = (text) => {
-    // Fix common OCR errors
-    let cleaned = text;
-    
-    // Fix $ being read as S or other characters
-    cleaned = cleaned.replace(/[S5]\s*(\d+[\.,]\d{2})/gi, '\$$1');
-    cleaned = cleaned.replace(/(\d+)[Ss](\d{2})/g, '$1.$2'); // 12S99 → 12.99
-    
-    // Fix O being read as 0 near numbers
-    cleaned = cleaned.replace(/[Oo](?=\d)/g, '0');
-    cleaned = cleaned.replace(/(\d)[Oo]/g, '$10');
-    
-    // Fix l or I being read as 1
-    cleaned = cleaned.replace(/[Il|](?=\d)/g, '1');
-    
-    // Fix common decimal mistakes
-    cleaned = cleaned.replace(/(\d+),(\d{2})(?!\d)/g, '$1.$2'); // 12,99 → 12.99
-    
-    // Remove lines that don't look like receipt items
-    const lines = cleaned.split('\n');
-    const validLines = lines.filter(line => {
-      line = line.trim();
-      if (!line) return false;
-      
-      // Keep lines with price patterns
-      if (/\$?\d+\.\d{2}/.test(line)) return true;
-      
-      // Keep lines with alphabetic text followed by numbers
-      if (/[a-zA-Z].+\d/.test(line)) return true;
-      
-      // Remove very short lines (likely noise)
-      if (line.length < 3) return false;
-      
-      return true;
-    });
-    
-    return validLines.join('\n');
-  };
-
   const openCamera = () => {
     cameraInputRef.current?.click();
   };
@@ -651,10 +553,6 @@ export default function ReceiptSplitterApp() {
   };
 
   const closeScanner = () => {
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
-    }
     setShowReceiptScanner(false);
     setReceiptImage(null);
     setIsProcessing(false);
@@ -664,499 +562,362 @@ export default function ReceiptSplitterApp() {
   };
 
   const cancelProcessing = () => {
-    if (workerRef.current) {
-      workerRef.current.terminate();
-      workerRef.current = null;
-    }
     setIsProcessing(false);
     setOcrProgress(0);
   };
 
   const processReceipt = async () => {
     if (!receiptImage) return;
-    
+  
     setIsProcessing(true);
     setOcrProgress(0);
     setOcrError('');
     setProcessingMethod('Veryfi');
-    
-    try {
-      // Try Veryfi first
+  
+    try { 
       const veryfiResult = await processWithVeryfi(receiptImage);
-      
+  
       if (veryfiResult && veryfiResult.line_items && veryfiResult.line_items.length > 0) {
-        // Veryfi succeeded
         const items = parseVeryfiResponse(veryfiResult);
         const tax = veryfiResult.tax?.toString() || '';
-        
-        // Add items directly
+  
         const newItems = items.map(item => ({
           id: Date.now() + Math.random(),
           name: item.name,
           price: item.price,
           claimedBy: []
         }));
-        
+  
         setItems(prevItems => [...prevItems, ...newItems]);
-        
-        // Auto-fill tax
+  
         if (tax) {
           setTax(tax);
         }
-        
+  
+        // ✅ Increment scan count (see next section)
+        setReceiptScanCount(count => count + 1);
+  
         setIsProcessing(false);
         setShowReceiptScanner(false);
         setReceiptImage(null);
-        
-        // Track successful receipt scan
+  
         ReactGA.event({
           category: 'User',
           action: 'receipt_scanned',
           label: 'Veryfi Success',
           value: newItems.length
         });
-        
       } else {
-        // Veryfi failed, fallback to Tesseract
-        console.log('Veryfi failed, falling back to Tesseract');
-        await processWithTesseract(receiptImage);
+        // No line items from Veryfi
+        setOcrError('We couldn’t find any items on this receipt. Try a clearer photo or add items manually.');
+        setIsProcessing(false);
       }
-      
     } catch (error) {
       console.error('Veryfi Error:', error);
-      // Fallback to Tesseract
-      await processWithTesseract(receiptImage);
-    }
-  };
-
-  const processWithVeryfi = async (imageData) => {
-    setOcrProgress(25);
-    
-    // Convert base64 to blob
-    const response = await fetch(imageData);
-    const blob = await response.blob();
-    
-    setOcrProgress(50);
-    
-    // Create form data
-    const formData = new FormData();
-    formData.append('file', blob, 'receipt.jpg');
-    
-    const clientId = import.meta.env.VITE_VERYFI_CLIENT_ID;
-    const username = import.meta.env.VITE_VERYFI_USERNAME;
-    const apiKey = import.meta.env.VITE_VERYFI_API_KEY;
-    
-    if (!clientId || !username || !apiKey) {
-      throw new Error('Veryfi credentials not configured');
-    }
-    
-    setOcrProgress(75);
-    
-    // Call Veryfi API
-    const veryfiResponse = await fetch('https://api.veryfi.com/api/v8/partner/documents', {
-      method: 'POST',
-      headers: {
-        'CLIENT-ID': clientId,
-        'AUTHORIZATION': `apikey ${username}:${apiKey}`,
-        'Accept': 'application/json',
-      },
-      body: formData
-    });
-    
-    setOcrProgress(100);
-    
-    if (!veryfiResponse.ok) {
-      throw new Error('Veryfi API request failed');
-    }
-    
-    return await veryfiResponse.json();
-  };
-
-  const parseVeryfiResponse = (veryfiData) => {
-    const items = [];
-    
-    if (veryfiData.line_items && Array.isArray(veryfiData.line_items)) {
-      veryfiData.line_items.forEach(item => {
-        if (item.description && item.total) {
-          items.push({
-            name: item.description.trim(),
-            price: parseFloat(item.total),
-            quantity: item.quantity || 1
-          });
-        }
-      });
-    }
-    
-    return items;
-  };
-
-  const processWithTesseract = async (imageData) => {
-    setProcessingMethod('Tesseract (fallback)');
-    setOcrProgress(0);
-    
-    try {
-      // Preprocess image
-      const preprocessedImage = await preprocessImage(imageData);
-      
-      // Create worker
-      workerRef.current = new Worker('/ocr-worker.js');
-      
-      // Listen for messages from worker
-      workerRef.current.onmessage = (e) => {
-        const { status, progress, text, error } = e.data;
-        
-        if (status === 'progress') {
-          setOcrProgress(progress);
-        } else if (status === 'complete') {
-          const cleanedText = cleanOcrText(text);
-          setRawOcrText(cleanedText);
-          setShowRawText(true);
-          setIsProcessing(false);
-          workerRef.current.terminate();
-          workerRef.current = null;
-        } else if (status === 'error') {
-          setOcrError(error || 'Failed to process receipt. Please try again or add items manually.');
-          setIsProcessing(false);
-          workerRef.current.terminate();
-          workerRef.current = null;
-        }
-      };
-      
-      // Send image to worker
-      workerRef.current.postMessage({ image: preprocessedImage });
-      
-    } catch (error) {
-      console.error('Tesseract Error:', error);
-      setOcrError('Failed to process receipt. Please try again or add items manually.');
+      setOcrError('We couldn’t read this receipt. Try a clearer photo or add items manually.');
       setIsProcessing(false);
     }
   };
+  
 
-  const continueFromRawText = () => {
-    // Phase 3: Parse the raw text and extract items
-    const { items, tax } = parseReceiptText(rawOcrText);
-    
-    if (items.length === 0) {
-      // Show error but keep showing the text
-      alert('No items found in receipt. Please check the extracted text and add items manually if needed.');
-      return;
+  const processWithVeryfi = async (imageData) => {
+    setOcrProgress(25);
+    setOcrError('');
+  
+    // imageData should be your data URL string, like "data:image/jpeg;base64,...."
+    if (!imageData) {
+      throw new Error('No receipt image provided');
     }
-    
-    // Add items to the main list with proper structure
-    const newItems = items.map(item => ({
-      id: Date.now() + Math.random(),
-      name: item.quantity > 1 ? `${item.name} (x${item.quantity})` : item.name,
-      price: item.price,
-      claimedBy: []
-    }));
-    
-    setItems(prevItems => [...prevItems, ...newItems]);
-    
-    // Auto-fill tax if extracted
-    if (tax) {
-      setTax(tax);
+  
+    setOcrProgress(50);
+  
+    const baseUrl = import.meta.env.DEV
+      ? 'http://localhost:5174'
+      : ''; // on Vercel, same origin
+
+    const response = await fetch(`${baseUrl}/api/veryfi`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_data: imageData,
+      }),
+    });
+  
+    setOcrProgress(100);
+  
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      console.error('Veryfi proxy error:', errData);
+      throw new Error('Veryfi API request failed');
     }
+  
+    const data = await response.json();
+    if (import.meta.env.DEV) {
+      console.log('Veryfi raw response:', data);
+    }
+    return data;
     
-    setShowRawText(false);
-    setReceiptImage(null);
-    setShowReceiptScanner(false);
   };
+  
+  
 
-  const parseReceiptText = (text) => {
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  const parseVeryfiResponse = (veryfiData) => {
     const items = [];
-    let taxAmount = '';
-    
-    for (const line of lines) {
-      // Pattern 1: "Item Name $12.99" or "Item Name €12.99" (same line)
-      const sameLineMatch = line.match(/^(.+?)\s+([\$€£¥]\s*\d+[\.,]\d{2})$/);
-      if (sameLineMatch) {
-        const itemName = sameLineMatch[1].trim();
-        const price = parsePrice(sameLineMatch[2]);
-        
-        if (price > 0 && !isNonItemLine(itemName)) {
-          const quantity = extractQuantity(itemName);
-          const cleanName = removeQuantity(itemName);
-          items.push({
-            id: Date.now() + Math.random(),
-            name: cleanName,
-            price,
-            quantity
-          });
-          continue;
-        }
-      }
-      
-      // Pattern 2: "Item Name" on one line, "$12.99" on next line
-      if (items.length > 0 && line.match(/^[\$€£¥]\s*\d+[\.,]\d{2}$/)) {
-        const price = parsePrice(line);
-        if (price > 0) {
-          items[items.length - 1].price = price;
-          continue;
-        }
-      }
-      
-      // Check if line is a tax line
-      const taxMatch = line.match(/(?:tax|sales tax|tva)\s*[\$€£¥]?\s*(\d+[\.,]\d{2})/i);
-      if (taxMatch && !taxAmount) {
-        taxAmount = parsePrice(taxMatch[1]);
-      }
+  
+    if (Array.isArray(veryfiData.line_items)) {
+      veryfiData.line_items.forEach((item) => {
+        if (!item.description || item.total == null) return;
+  
+        const rawName = item.description.trim();
+        const qty = item.quantity && item.quantity > 1 ? item.quantity : 1;
+  
+        const name =
+          qty > 1
+            ? `x${qty} ${rawName}`
+            : rawName;
+  
+        items.push({
+          name, 
+          // Veryfi's `total` is the total price for this line (includes quantity)
+          price: Number(item.total),
+          quantity: qty,
+        });
+      });
     }
-    
-    return { items, tax: taxAmount.toString() };
+  
+    return items;
   };
 
-  const parsePrice = (priceStr) => {
-    // Remove currency symbols and spaces
-    const cleaned = priceStr.replace(/[\$€£¥\s]/g, '').replace(',', '.');
-    return parseFloat(cleaned);
-  };
 
-  const extractQuantity = (itemName) => {
-    // Look for patterns like "2x Item" or "2 Item"
-    const match = itemName.match(/^(\d+)\s*x?\s+/i);
-    return match ? parseInt(match[1]) : 1;
-  };
+  const [showSplash, setShowSplash] = useState(true);
 
-  const removeQuantity = (itemName) => {
-    // Remove quantity prefix
-    return itemName.replace(/^\d+\s*x?\s+/i, '').trim();
-  };
-
-  const isNonItemLine = (text) => {
-    // Patterns that shouldn't be items
-    const nonItemPatterns = [
-      /^(sub\s*total|total|tax|sales\s*tax|subtotal|change|cash|paid\s*by|transaction|receipt|thank|business|address|phone|date|time|order|host)/i,
-      /^(visa|mastercard|amex|credit|debit|card)/i,
-      /^[\d\-]{5,}$/, // Just numbers/dashes (like transaction IDs)
-    ];
-    
-    return nonItemPatterns.some(pattern => pattern.test(text));
-  };
+  useEffect(() => {
+    // Quick splash — adjust ms if you want it shorter/longer
+    const timer = setTimeout(() => setShowSplash(false), 1100);
+    return () => clearTimeout(timer);
+  }, []);
 
   if (showSummary) {
-    const totals = calculateTotals();
-    const grandTotal = items.reduce((sum, item) => sum + item.price, 0) + parseFloat(tax || 0) + parseFloat(tip || 0);
-    
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-2xl mx-auto bg-white rounded-xl shadow-lg p-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Summary</h1>
-          
-          <div className="mb-6 p-4 bg-indigo-50 rounded-lg">
-            <p className="text-lg font-semibold text-gray-700">Receipt Total: ${grandTotal.toFixed(2)}</p>
-          </div>
-          
-          <div className="space-y-3 mb-6">
-            {sortedPeople.map(person => {
-              const total = totals[person.id];
-              const isExpanded = expandedPeople[person.id];
-              
-              return (
-                <div key={person.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="w-full p-4 flex items-center justify-between bg-white">
-                    <span className="font-semibold text-gray-800">{total.name}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg font-bold text-indigo-600">${total.total.toFixed(2)}</span>
-                      <button
-                        onClick={() => sharePersonTotal(person, total.total)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Share payment request"
-                      >
-                        <Share2 size={20} />
-                      </button>
-                      <button
-                        onClick={() => toggleExpanded(person.id)}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {isExpanded && (
-                    <div className="p-4 bg-gray-50 border-t border-gray-200">
-                      <div className="space-y-2 mb-3">
-                        <p className="font-semibold text-gray-700 mb-2">Items:</p>
-                        {total.claimedItems.map((item, idx) => (
-                          <div key={idx} className="flex justify-between text-sm pl-4">
-                            <span className="text-gray-600">
-                              {item.name} {item.isShared && `(split ${item.sharedWith} ways)`}
-                            </span>
-                            <span className="text-gray-800">${item.cost.toFixed(2)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="space-y-1 pt-3 border-t border-gray-300">
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Subtotal:</span>
-                          <span className="text-gray-800">${total.subtotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Tax:</span>
-                          <span className="text-gray-800">${total.tax.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Tip:</span>
-                          <span className="text-gray-800">${total.tip.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between font-semibold pt-2 border-t border-gray-300">
-                          <span className="text-gray-700">Total:</span>
-                          <span className="text-indigo-600">${total.total.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowSummary(false)}
-              className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-            >
-              Back
-            </button>
-            <button
-              onClick={shareTotals}
-              className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              Share Totals
-            </button>
-            <button
-              onClick={startNewReceipt}
-              className="flex-1 py-3 px-4 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors"
-            >
-              New Receipt
-            </button>
-          </div>
-        </div>
-      </div>
+      <SummaryView
+        items={items}
+        tax={tax}
+        tip={tip}
+        sortedPeople={sortedPeople}
+        expandedPeople={expandedPeople}
+        calculateTotals={calculateTotals}
+        onToggleExpanded={toggleExpanded}
+        onSharePersonTotal={sharePersonTotal}
+        onBack={() => setShowSummary(false)}
+        onShareTotals={shareTotals}
+        onStartNewReceipt={startNewReceipt}
+      />
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 pb-24">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">Receipt Splitter</h1>
-        
-        {/* Warning Modal */}
-        {showWarning && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="text-yellow-500" size={32} />
-                <h2 className="text-xl font-bold text-gray-800">Warning!</h2>
-              </div>
-              <p className="text-gray-700 mb-6">
-                {unclaimedCount} unclaimed {unclaimedCount === 1 ? 'item' : 'items'}. 
-                Continue to summary?
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowWarning(false)}
-                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={confirmSummary}
-                  className="flex-1 py-2 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700"
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Venmo Username Error Modal */}
-        {showVenmoError && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="text-red-500" size={32} />
-                <h2 className="text-xl font-bold text-gray-800">Venmo Username Required</h2>
-              </div>
-              <p className="text-gray-700 mb-4">
-                Please enter your Venmo username to share payment requests
-              </p>
-              <input
-                type="text"
-                placeholder="Your Venmo username"
-                value={venmoUsername}
-                onChange={(e) => handleVenmoUsernameChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent mb-4"
-              />
-              <button
-                onClick={() => setShowVenmoError(false)}
-                className="w-full py-2 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700"
+      <>
+        <SplashScreen
+          visible={showSplash}
+          appName="Receipt Splitter"
+          tagline="Split the bill. Skip the hassle."
+        />
+      {/* 
+        <LandingHero
+          onScanClick={() => setShowReceiptScanner(true)}
+          colors={{
+            heading: COLORS.textHeading,
+            body: COLORS.textBody,
+            accent: COLORS.accentPrimary,
+          }}
+        /> */}
+  
+        <div
+          className={`min-h-screen p-4 pb-24 transition-opacity duration-300 ${
+            showSplash ? 'opacity-100 pointer-events-none' : 'opacity-100'
+          }`}
+          style={{ backgroundColor: COLORS.background }}
+        >
+        <div className="max-w-2xl mx-auto">
+        <HeroTitle
+          title="Receipt Splitter"
+          subtitle="Split the bill. Skip the hassle."
+          colors={{
+            heading: COLORS.textHeading,
+            body: COLORS.textBody,
+          }}
+        />
+          {/* Warning Modal */}
+          {showWarning && (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+              <div
+                className="rounded-md p-6 max-w-sm w-full"
+                style={{
+                  backgroundColor: COLORS.background,
+                  border: `0.5px solid ${COLORS.accentPrimary}`,
+                }}
               >
-                Done
-              </button>
+                <div className="flex items-center gap-3 mb-4">
+                  <AlertCircle
+                    size={32}
+                    style={{ color: COLORS.accentPrimary }}
+                  />
+                  <h2
+                    className="text-xl font-bold"
+                    style={{ color: COLORS.textHeading }}
+                  >
+                    Warning
+                  </h2>
+                </div>
+
+                <p
+                  className="mb-6 text-sm"
+                  style={{ color: COLORS.textBody }}
+                >
+                  {unclaimedCount} unclaimed{' '}
+                  {unclaimedCount === 1 ? 'item' : 'items'}. Continue to
+                  summary anyway?
+                </p>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowWarning(false)}
+                    className="flex-1 py-2 px-4 rounded-md font-semibold transition-colors duration-150"
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: `1px solid ${COLORS.borderMuted}`,
+                      color: COLORS.textBody,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                      e.currentTarget.style.color = COLORS.accentPrimary;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = COLORS.borderMuted;
+                      e.currentTarget.style.color = COLORS.textBody;
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmSummary}
+                    className={primaryButtonClasses + ' flex-1 py-2 px-4'}
+                    style={{
+                      backgroundColor: COLORS.accentPrimary,
+                      color: '#000000',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = COLORS.accentHover;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Receipt Scanner Modal */}
         {showReceiptScanner && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div
+              className="rounded-md p-6 max-w-md w-full shadow-lg max-h-[90vh] overflow-y-auto"
+              style={{
+                backgroundColor: COLORS.background,
+                border: `0.5px solid ${COLORS.accentPrimary}`,
+              }}
+            >
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-gray-800">Scan Receipt</h2>
+                <h2
+                  className="text-xl font-bold"
+                  style={{ color: COLORS.textHeading }}
+                >
+                  Scan Receipt
+                </h2>
                 <button
                   onClick={closeScanner}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 rounded-md transition-colors duration-150"
+                  style={{
+                    color: COLORS.textBody,
+                    border: `1px solid ${COLORS.borderMuted}40`,
+                    backgroundColor: 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isProcessing) {
+                      e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                      e.currentTarget.style.color = COLORS.accentPrimary;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = `${COLORS.borderMuted}40`;
+                    e.currentTarget.style.color = COLORS.textBody;
+                  }}
                   disabled={isProcessing}
                 >
-                  <X size={24} />
+                  <X size={18} />
                 </button>
               </div>
-              
+
               {!receiptImage ? (
                 <div className="space-y-4">
-                  {showScanTips && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="font-semibold text-blue-900">Tips for Best Results:</h3>
-                        <button
-                          onClick={() => setShowScanTips(false)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                      <ul className="text-sm text-blue-800 space-y-1">
-                        <li>• Place receipt on a flat surface</li>
-                        <li>• Ensure good lighting</li>
-                        <li>• Avoid shadows</li>
-                      </ul>
-                    </div>
-                  )}
-                  
-                  <p className="text-gray-600 text-center mb-6">
-                    Take a photo or upload an image of your receipt
+                  <p
+                    className="text-center mb-6 text-sm"
+                    style={{ color: COLORS.textBody, opacity: 0.8 }}
+                  >
+                    Take a photo or upload an image of your receipt.
                   </p>
-                  
+
                   <button
                     onClick={openCamera}
-                    className="w-full py-4 px-6 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-3"
+                    className={
+                      primaryButtonClasses +
+                      ' w-full py-3 px-6 flex items-center justify-center gap-3'
+                    }
+                    style={{
+                      backgroundColor: COLORS.accentPrimary,
+                      color: '#000000',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = COLORS.accentHover;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+                    }}
                   >
-                    <Camera size={24} />
-                    Take Photo
+                    <Camera size={20} />
+                    <span className="uppercase tracking-wide text-xs">
+                      Take Photo
+                    </span>
                   </button>
-                  
+
                   <button
                     onClick={openFileUpload}
-                    className="w-full py-4 px-6 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition-colors flex items-center justify-center gap-3"
+                    className="w-full py-3 px-6 rounded-md font-semibold transition-colors duration-150 flex items-center justify-center gap-3"
+                    style={{
+                      backgroundColor: '#111111',
+                      color: COLORS.textBody,
+                      border: `1px solid ${COLORS.borderMuted}`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                      e.currentTarget.style.color = COLORS.accentPrimary;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = COLORS.borderMuted;
+                      e.currentTarget.style.color = COLORS.textBody;
+                    }}
                   >
-                    <Upload size={24} />
-                    Upload Photo
+                    <Upload size={20} />
+                    <span className="uppercase tracking-wide text-xs">
+                      Upload Photo
+                    </span>
                   </button>
-                  
+
                   <input
                     ref={cameraInputRef}
                     type="file"
@@ -1165,7 +926,7 @@ export default function ReceiptSplitterApp() {
                     onChange={handleImageCapture}
                     className="hidden"
                   />
-                  
+
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1180,28 +941,58 @@ export default function ReceiptSplitterApp() {
                     <img
                       src={receiptImage}
                       alt="Receipt preview"
-                      className="w-full max-h-96 object-contain rounded-lg border-2 border-gray-200"
+                      className="w-full max-h-96 object-contain rounded-md"
+                      style={{
+                        border: `1px solid ${COLORS.borderMuted}`,
+                      }}
                     />
                   </div>
-                  
+
                   {ocrError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <p className="text-red-700 text-sm">{ocrError}</p>
+                    <div
+                      className="rounded-md p-4"
+                      style={{
+                        backgroundColor: '#2A0000',
+                        border: `0.5px solid ${COLORS.danger}`,
+                      }}
+                    >
+                      <p
+                        className="text-sm"
+                        style={{ color: COLORS.danger }}
+                      >
+                        {ocrError}
+                      </p>
                     </div>
                   )}
-                  
+
                   {isProcessing ? (
                     <div className="text-center py-4">
-                      <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                      <div
+                        className="w-full h-2 rounded-full mb-3"
+                        style={{ backgroundColor: '#222222' }}
+                      >
                         <div
-                          className="bg-indigo-600 h-3 rounded-full transition-all duration-300"
-                          style={{ width: `${ocrProgress}%` }}
-                        ></div>
+                          // Animation timing – adjust duration here if you want faster/slower motion
+                          className="h-2 rounded-full transition-all duration-150"
+                          style={{
+                            width: `${ocrProgress}%`,
+                            backgroundColor: COLORS.accentPrimary,
+                          }}
+                        />
                       </div>
-                      <p className="text-gray-600 font-medium">Processing with {processingMethod}... {ocrProgress}%</p>
+
+                      <p
+                        className="font-medium text-sm"
+                        style={{ color: COLORS.textBody }}
+                      >
+                        {ocrStatusText
+                          ? `${ocrStatusText} (${processingMethod || 'Veryfi'})... ${ocrProgress}%`
+                          : `Processing with ${processingMethod || 'Veryfi'}... ${ocrProgress}%`}
+                      </p>
                       <button
                         onClick={cancelProcessing}
-                        className="mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 underline"
+                        className="mt-4 text-xs underline"
+                        style={{ color: COLORS.textBody, opacity: 0.8 }}
                       >
                         Cancel
                       </button>
@@ -1210,13 +1001,38 @@ export default function ReceiptSplitterApp() {
                     <div className="flex gap-3">
                       <button
                         onClick={retakePhoto}
-                        className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                        className="flex-1 py-3 px-4 rounded-md font-semibold transition-colors duration-150"
+                        style={{
+                          backgroundColor: '#111111',
+                          color: COLORS.textBody,
+                          border: `1px solid ${COLORS.borderMuted}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                          e.currentTarget.style.color = COLORS.accentPrimary;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = COLORS.borderMuted;
+                          e.currentTarget.style.color = COLORS.textBody;
+                        }}
                       >
                         Retake
                       </button>
                       <button
                         onClick={processReceipt}
-                        className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+                        className={primaryButtonClasses + ' flex-1 py-3 px-4'}
+                        style={{
+                          backgroundColor: COLORS.accentPrimary,
+                          color: '#000000',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            COLORS.accentHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor =
+                            COLORS.accentPrimary;
+                        }}
                       >
                         Use This Photo
                       </button>
@@ -1227,75 +1043,101 @@ export default function ReceiptSplitterApp() {
             </div>
           </div>
         )}
-
-        {/* Raw OCR Text Modal */}
-        {showRawText && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Extracted Text (Debug)</h2>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">{rawOcrText}</pre>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    setShowRawText(false);
-                    setReceiptImage(null);
-                  }}
-                  className="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={continueFromRawText}
-                  className="flex-1 py-3 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
-                >
-                  Continue to Parse
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Adjust Percentages Modal */}
         {adjustingItem && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">Adjust Split Percentages</h2>
-              
+          <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div
+              className="rounded-md p-6 max-w-md w-full max-h-[80vh] overflow-y-auto"
+              style={{
+                backgroundColor: COLORS.background,
+                border: `1px solid ${COLORS.accentPrimary}`,
+              }}
+            >
+              <h2
+                className="text-xl font-bold mb-4"
+                style={{ color: COLORS.textHeading }}
+              >
+                Adjust Split Percentages
+              </h2>
+
               <div className="space-y-4 mb-6">
-                {items.find(i => i.id === adjustingItem)?.claimedBy.map(claim => {
-                  const person = people.find(p => p.id === claim.personId);
-                  return (
-                    <div key={claim.personId}>
-                      <div className="flex justify-between mb-2">
-                        <span className="font-medium text-gray-700">{person?.name || 'Unknown'}</span>
-                        <span className="text-indigo-600 font-semibold">{percentages[claim.personId]?.toFixed(1)}%</span>
+                {items
+                  .find((i) => i.id === adjustingItem)
+                  ?.claimedBy.map((claim) => {
+                    const person = people.find((p) => p.id === claim.personId);
+                    const pct = percentages[claim.personId] ?? 0;
+
+                    return (
+                      <div key={claim.personId}>
+                        <div className="flex justify-between mb-1">
+                          <span
+                            className="font-medium text-sm"
+                            style={{ color: COLORS.textBody }}
+                          >
+                            {person?.name || 'Unknown'}
+                          </span>
+                          <span
+                            className="text-sm font-semibold"
+                            style={{ color: COLORS.accentPrimary }}
+                          >
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={pct}
+                          onChange={(e) =>
+                            updatePercentage(
+                              claim.personId,
+                              parseFloat(e.target.value),
+                            )
+                          }
+                          className="w-full"
+                          style={{
+                            accentColor: COLORS.accentPrimary,
+                          }}
+                        />
                       </div>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={percentages[claim.personId] || 0}
-                        onChange={(e) => updatePercentage(claim.personId, parseFloat(e.target.value))}
-                        className="w-full"
-                      />
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
-              
+
               <div className="flex gap-3">
                 <button
                   onClick={() => setAdjustingItem(null)}
-                  className="flex-1 py-2 px-4 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
+                  className="flex-1 py-2 px-4 rounded-md font-semibold transition-colors duration-150"
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${COLORS.borderMuted}`,
+                    color: COLORS.textBody,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                    e.currentTarget.style.color = COLORS.accentPrimary;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.borderMuted;
+                    e.currentTarget.style.color = COLORS.textBody;
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={savePercentages}
-                  className="flex-1 py-2 px-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700"
+                  className={primaryButtonClasses + ' flex-1 py-2 px-4'}
+                  style={{
+                    backgroundColor: COLORS.accentPrimary,
+                    color: '#000000',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = COLORS.accentHover;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+                  }}
                 >
                   Save
                 </button>
@@ -1303,10 +1145,30 @@ export default function ReceiptSplitterApp() {
             </div>
           </div>
         )}
-        
+
+
         {/* Add People Section */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Add People</h2>
+        <div
+          // Content Cards – change border color here if you want grey instead of yellow
+          className="rounded-md mb-6"
+          style={{
+            backgroundColor: COLORS.background,
+            // border: `.5px solid ${COLORS.accentPrimary}`,
+          }}
+        >
+          <h2
+            className="text-xl font-semibold mb-4 flex items-center gap-2"
+            style={{ color: COLORS.textHeading }}
+          >
+            <span
+              className="material-symbols-outlined flex items-center justify-center text-[22px]"
+              style={{ color: COLORS.textHeading, lineHeight: '1' }}
+            >
+              person_add
+            </span>
+            Add People
+          </h2>
+
           <div className="flex gap-2 mb-4">
             <input
               type="text"
@@ -1314,20 +1176,64 @@ export default function ReceiptSplitterApp() {
               value={personName}
               onChange={(e) => setPersonName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && addPerson()}
-              className="flex-1 min-w-0 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className="flex-1 min-w-0 px-3 py-2 rounded-md text-sm focus:outline-none"
+              style={{
+                backgroundColor: '#111111',
+                border: `1px solid ${COLORS.borderMuted}`,
+                color: COLORS.textBody,
+              }}
             />
-            <button
+            {/* <button
               onClick={addPerson}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center shrink-0"
-              title="Add person"
+              className={primaryButtonClasses + 'w-10 h-10 flex items-center justify-center'}
+              style={{
+                backgroundColor: COLORS.accentPrimary,
+                color: '#000000',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentHover;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+              }}
             >
-              <Plus size={20} />
+              <Plus size={18} />
+            </button> */}
+
+            <button
+              onClick={addItem}
+              className={
+                primaryButtonClasses +
+                ' w-10 h-10 shrink-0 flex items-center justify-center'
+              }
+              title="Add item"
+              style={{
+                backgroundColor: COLORS.accentPrimary,
+                color: '#000000',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentHover;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+              }}
+            >
+              <Plus size={18} />
             </button>
           </div>
-          
-          <div className="space-y-2">
-            {sortedPeople.map(person => (
-              <div key={person.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+
+          <div className="mt-2 ml-4">
+            {sortedPeople.map((person, index) => (
+              <div
+                key={person.id}
+                className="flex items-center justify-between py-2"
+                style={{
+                  borderBottom:
+                    index === sortedPeople.length - 1
+                      ? 'none'
+                      : `1px solid ${COLORS.borderMuted}40`, // divider between people
+                }} 
+              >
                 {editingPerson === person.id ? (
                   <>
                     <input
@@ -1335,31 +1241,75 @@ export default function ReceiptSplitterApp() {
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && saveEditPerson()}
-                      className="flex-1 px-3 py-1 border border-gray-300 rounded"
+                      className="flex-1 px-3 py-1 rounded-md text-sm focus:outline-none"
                       autoFocus
+                      style={{
+                        backgroundColor: '#111111',
+                        border: `1px solid ${COLORS.borderMuted}`,
+                        color: COLORS.textBody,
+                      }}
                     />
                     <button
                       onClick={saveEditPerson}
-                      className="ml-2 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                      className={primaryButtonClasses + ' ml-2 px-3 py-1 text-sm'}
+                      style={{
+                        backgroundColor: COLORS.accentPrimary,
+                        color: '#000000',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = COLORS.accentHover;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+                      }}
                     >
                       Save
                     </button>
                   </>
                 ) : (
                   <>
-                    <span className="font-medium text-gray-700">{person.name}</span>
+                    <span
+                      className="font-medium"
+                      style={{ color: COLORS.textBody }}
+                    >
+                      {person.name}
+                    </span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => startEditPerson(person)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 rounded-md transition-colors duration-150"
+                        style={{
+                          color: COLORS.textBody,
+                          border: `1px solid ${COLORS.borderMuted}40`,
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                          e.currentTarget.style.color = COLORS.accentPrimary;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = `${COLORS.borderMuted}40`;
+                          e.currentTarget.style.color = COLORS.textBody;
+                        }}
                       >
-                        <Edit2 size={18} />
+                        <Edit2 size={16} />
                       </button>
                       <button
                         onClick={() => deletePerson(person.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 rounded-md transition-colors duration-150"
+                        style={{
+                          backgroundColor: COLORS.danger,
+                          color: '#FFFFFF',
+                          border: `1px solid ${COLORS.danger}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.opacity = 0.9;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.opacity = 1;
+                        }}
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
                   </>
@@ -1367,21 +1317,50 @@ export default function ReceiptSplitterApp() {
               </div>
             ))}
           </div>
-        </div>
-        
+        </div>       
         {/* Add Items Section */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Items</h2>
-          
-          {/* Scan Receipt Button */}
+        <div
+          // Content Cards – change border color here if you want grey instead of yellow
+          className="rounded-md mb-6"
+          style={{
+            backgroundColor: COLORS.background,
+            // border: `.5px solid ${COLORS.accentPrimary}`,
+          }}
+        >
+          <h2
+            className="text-xl font-semibold mb-4 flex items-center gap-2"
+            style={{ color: COLORS.textHeading }}
+          >
+            <span
+              className="material-symbols-outlined flex items-center justify-center text-[22px]"
+              style={{ color: COLORS.textHeading, lineHeight: '1' }}
+            >
+              restaurant
+            </span>
+            Add Items
+          </h2>
+
           <button
             onClick={() => setShowReceiptScanner(true)}
-            className="w-full mb-4 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-colors flex items-center justify-center gap-2"
+            className={
+              primaryButtonClasses +
+              ' w-full py-3 mb-4 text-sm flex items-center justify-center gap-2'
+            }
+            style={{
+              backgroundColor: COLORS.accentPrimary,
+              color: '#000000',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = COLORS.accentHover;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+            }}
           >
-            <Camera size={20} />
-            Scan Receipt
+            <Camera size={18} />
+            <span className="uppercase tracking-wide text-xs">Scan Receipt</span>
           </button>
-          
+
           <div className="flex gap-2">
             <input
               type="text"
@@ -1389,7 +1368,12 @@ export default function ReceiptSplitterApp() {
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && itemPrice && addItem()}
-              className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+              className="flex-1 min-w-0 px-3 py-2 rounded-md text-sm focus:outline-none"
+              style={{
+                backgroundColor: '#111111',
+                border: `1px solid ${COLORS.borderMuted}`,
+                color: COLORS.textBody,
+              }}
             />
             <input
               type="number"
@@ -1398,166 +1382,521 @@ export default function ReceiptSplitterApp() {
               onChange={(e) => setItemPrice(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && itemName && addItem()}
               step="0.01"
-              className="w-20 shrink-0 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
+              className="w-20 shrink-0 px-2 py-2 rounded-md text-sm text-right focus:outline-none"
+              style={{
+                backgroundColor: '#111111',
+                border: `1px solid ${COLORS.borderMuted}`,
+                color: COLORS.textBody,
+              }}
             />
+
             <button
               onClick={addItem}
-              className="w-10 h-10 shrink-0 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center"
+              className={
+                primaryButtonClasses +
+                ' w-10 h-10 shrink-0 flex items-center justify-center'
+              }
               title="Add item"
+              style={{
+                backgroundColor: COLORS.accentPrimary,
+                color: '#000000',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentHover;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+              }}
             >
-              <Plus size={20} />
+              <Plus size={32} />
             </button>
+            
           </div>
         </div>
 
-        {/* Items List */}
+        {/* Items Micro-Label — edit/remove here */}
         {items.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Items</h2>
-            <div className="space-y-4">
-              {items.map(item => {
-                return (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-gray-800">{item.name}</span>
-                          <span className="text-lg font-bold text-indigo-600">${item.price.toFixed(2)}</span>
-                        </div>
-                      </div>
+          <>
+            <p
+              className="text-[11px] tracking-[0.18em] mb-2"
+              style={{ color: COLORS.textBody, opacity: 0.7 }}
+            >
+              ITEMS
+            </p>
+
+            {/* Content Cards – change border color here if you want grey instead of yellow */}
+            <div className="space-y-2 pb-4 mb-6">
+              {items.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="rounded-md p-4"
+                  style={{
+                    backgroundColor: COLORS.background,
+                    border: `.5px solid ${COLORS.accentPrimary}`,
+                  }}
+                >
+                  {/* Item Header Row */}
+                  <div className="flex items-center justify-between mb-2 gap-3">
+                    <span
+                      className="font-semibold"
+                      style={{ color: COLORS.textBody }}
+                    >
+                      {item.name}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {/* Bigger price, in yellow */}
+                      <span
+                        className="text-base font-bold"
+                        style={{ color: COLORS.accentPrimary }}
+                      >
+                        ${item.price.toFixed(2)}
+                      </span>
+
+                      {/* Edit / Delete – same style as Add People section */}
+                      <button
+                        onClick={() => startEditItem(item)}
+                        className="p-2 rounded-md transition-colors duration-150"
+                        style={{
+                          color: COLORS.textBody,
+                          border: `1px solid ${COLORS.borderMuted}40`,
+                          backgroundColor: 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                          e.currentTarget.style.color = COLORS.accentPrimary;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = `${COLORS.borderMuted}40`;
+                          e.currentTarget.style.color = COLORS.textBody;
+                        }}
+                      >
+                        <Edit2 size={16} />
+                      </button>
                       <button
                         onClick={() => deleteItem(item.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-4"
-                        title="Delete item"
+                        className="p-2 rounded-md transition-colors duration-150"
+                        style={{
+                          backgroundColor: COLORS.danger,
+                          color: '#FFFFFF',
+                          border: `1px solid ${COLORS.danger}`,
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.opacity = 0.9;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.opacity = 1;
+                        }}
                       >
-                        <Trash2 size={20} />
+                        <Trash2 size={16} />
                       </button>
                     </div>
-                    
-                    {/* Person Chips */}
-                    {sortedPeople.length > 0 && (
-                      <div className="mb-3">
-                        {item.claimedBy.length > 1 && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-gray-600 italic">
-                              (split {item.claimedBy.length} ways)
-                            </span>
-                            <button
-                              onClick={() => openAdjustPercentages(item)}
-                              className="text-xs px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 transition-colors"
-                            >
-                              Adjust
-                            </button>
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          {sortedPeople.map(person => {
-                            const isClaimed = item.claimedBy.some(c => c.personId === person.id);
-                            return (
-                              <button
-                                key={person.id}
-                                onClick={() => toggleClaimItem(item.id, person.id)}
-                                className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                                  isClaimed
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-indigo-100'
-                                }`}
-                              >
-                                {person.name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Claimed by list */}
-                    {item.claimedBy.length > 0 && (
-                      <div className="mt-3 pl-4 space-y-1 border-t border-gray-200 pt-3">
-                        {item.claimedBy.map(claim => {
-                          const person = people.find(p => p.id === claim.personId);
-                          const cost = calculatePersonCost(item, claim.personId);
+                  </div>
+
+                  {/* People chips for this item + Adjust button */}
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex flex-wrap gap-2">
+                      {sortedPeople.length === 0 ? (
+                        <p
+                          className="text-xs"
+                          style={{ color: COLORS.textBody, opacity: 0.6 }}
+                        >
+                          Add people to assign this item.
+                        </p>
+                      ) : (
+                        sortedPeople.map((person) => {
+                          const isSelected = item.claimedBy.some(
+                            (c) => c.personId === person.id
+                          );
+
+                          // New chip styling:
+                          // - Default: subtle bordered pill, dark bg, soft white text
+                          // - Hover: yellow border/text
+                          // - Selected: filled yellow with black text
                           return (
-                            <div key={claim.personId} className="flex justify-between text-sm">
-                              <span className="text-gray-600">{person?.name || 'Unknown'}</span>
-                              <span className="text-gray-800 font-medium">${cost.toFixed(2)}</span>
+                            <button
+                              key={person.id}
+                              onClick={() => toggleClaimItem(item.id, person.id)}
+                              className={chipBaseClasses}
+                              style={
+                                isSelected
+                                  ? {
+                                      backgroundColor: COLORS.accentPrimary,
+                                      color: '#000000',
+                                      borderColor: COLORS.accentPrimary,
+                                    }
+                                  : {
+                                      backgroundColor: '#111111',
+                                      color: COLORS.textBody,
+                                      borderColor: `${COLORS.borderMuted}80`,
+                                    }
+                              }
+                              onMouseEnter={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.borderColor =
+                                    COLORS.accentPrimary;
+                                  e.currentTarget.style.color = COLORS.accentPrimary;
+                                  e.currentTarget.style.backgroundColor = '#151515';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) {
+                                  e.currentTarget.style.borderColor =
+                                    `${COLORS.borderMuted}80`;
+                                  e.currentTarget.style.color = COLORS.textBody;
+                                  e.currentTarget.style.backgroundColor = '#111111';
+                                }
+                              }}
+                            >
+                              {person.name}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Adjust button – only when 2+ people claimed this item */}
+                    {item.claimedBy.length > 1 && (
+                      <button
+                      onClick={() => openAdjustPercentages(item)}
+                      className="px-3 py-1 rounded-md text-xs font-semibold transition-colors duration-150"
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: `0.5px solid ${COLORS.borderMuted}`,
+                        color: COLORS.textBody,
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = COLORS.accentPrimary;
+                        e.currentTarget.style.color = COLORS.accentPrimary;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = COLORS.borderMuted;
+                        e.currentTarget.style.color = COLORS.textBody;
+                      }}
+                    >
+                      Adjust
+                    </button>
+                    
+                    )}
+                  </div>
+
+                  {/* Shared info row */}
+                  <div
+                    className="pt-2 mt-2"
+                    style={{
+                      borderTop: `1px solid ${COLORS.borderMuted}40`, // 40 = ~25% opacity
+                    }}
+                  >
+                    {item.claimedBy.length > 0 ? (
+                      <div className="space-y-1 ml-2">
+                        {item.claimedBy.map((claim) => {
+                          const person = people.find((p) => p.id === claim.personId);
+
+                          const numClaimed = item.claimedBy.length;
+                          const pct =
+                            claim.percentage !== null &&
+                            claim.percentage !== undefined
+                              ? claim.percentage
+                              : 100 / numClaimed;
+
+                          const share = item.price * (pct / 100);
+
+                          return (
+                            <div
+                              key={claim.personId}
+                              className="flex justify-between text-xs"
+                            >
+                              <span
+                                style={{
+                                  color: COLORS.textBody,
+                                }}
+                              >
+                                {person?.name || 'Unknown'}
+                              </span>
+                              <span
+                                className="font-semibold"
+                                style={{
+                                  color: COLORS.accentPrimary,
+                                }}
+                              >
+                                ${share.toFixed(2)}
+                              </span>
                             </div>
                           );
                         })}
                       </div>
+                    ) : (
+                      <span />
                     )}
                   </div>
-                );
-              })}
+
+                </div>
+              ))}
             </div>
-          </div>
+          </>
         )}
 
-        {/* Tax and Tip */}
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">Tax & Tip</h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tax Amount</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={tax}
-                onChange={(e) => setTax(e.target.value)}
-                step="0.01"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tip Amount</label>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={tip}
-                onChange={(e) => setTip(e.target.value)}
-                step="0.01"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Tip Split Method</label>
-              <select
-                value={tipSplitMethod}
-                onChange={(e) => setTipSplitMethod(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              >
-                <option value="proportional">Split Proportionally</option>
-                <option value="equal">Split Equally</option>
-              </select>
+
+
+      {/* ---- Tax & Tip Section ---- */}
+      <div
+        className="rounded-md mb-6"
+        style={{
+          backgroundColor: COLORS.background,
+        }}
+      >
+        <h2
+          className="text-xl font-semibold mb-4 flex items-center gap-2"
+          style={{ color: COLORS.textHeading }}
+        >
+          <span
+            className="material-symbols-outlined text-[22px] flex items-center"
+            style={{ color: COLORS.textHeading }}
+          >
+            attach_money
+          </span>
+          Tax &amp; Tip
+        </h2>
+
+        <div className="space-y-6">
+
+          {/* --- TAX --- */}
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: COLORS.textBody }}
+            >
+              Tax Amount
+            </label>
+            <input
+              type="number"
+              placeholder="0.00"
+              value={tax}
+              onChange={e => setTax(e.target.value)}
+              step="0.01"
+              className="w-full px-3 py-2 rounded-md text-sm focus:outline-none"
+              style={{
+                backgroundColor: '#111111',
+                border: `1px solid ${
+                  tax ? COLORS.accentPrimary : COLORS.borderMuted
+                }`,
+                color: COLORS.textBody,
+              }}
+            />
+          </div>
+
+          {/* --- TIP AMOUNT + PRESET BUTTONS --- */}
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: COLORS.textBody }}
+            >
+              Tip Amount
+            </label>
+
+            {/* % Buttons */}
+            <div className="flex gap-2 mb-3">
+              {[15, 20, 25].map(pct => (
+                <button
+                  key={pct}
+                  onClick={() => {
+                    const subtotal = items.reduce((sum, item) => sum + item.price, 0);
+                    const newTip = ((subtotal * pct) / 100).toFixed(2);
+                    setTip(newTip);
+                  }}
+                  className="px-3 py-1 rounded-md text-xs font-semibold transition-colors"
+                  style={{
+                    border: `1px solid ${
+                      parseFloat(tip || 0) > 0 &&
+                      Math.abs((tip / items.reduce((s, i) => s + i.price, 0)) * 100 - pct) < 1
+                        ? COLORS.accentPrimary
+                        : COLORS.borderMuted
+                    }`,
+                    color: COLORS.textBody,
+                    backgroundColor: '#111111',
+                  }}
+                >
+                  {pct}%
+                </button>
+              ))}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Venmo Username <span className="text-xs text-gray-500">(dev feature)</span>
-              </label>
+            <input
+              type="number"
+              placeholder="0.00"
+              value={tip}
+              onChange={e => setTip(e.target.value)}
+              step="0.01"
+              className="w-full px-3 py-2 rounded-md text-sm focus:outline-none"
+              style={{
+                backgroundColor: '#111111',
+                border: `1px solid ${
+                  tip ? COLORS.accentPrimary : COLORS.borderMuted
+                }`,
+                color: COLORS.textBody,
+              }}
+            />
+          </div>
+
+          {/* --- TIP SPLIT METHOD --- */}
+<div>
+  <label
+    className="block text-sm font-medium mb-2"
+    style={{ color: COLORS.textBody }}
+  >
+    Tip Split Method
+  </label>
+
+  <div
+    className="relative"
+    style={{
+      border: `1px solid ${
+        tipSplitMethod ? COLORS.accentPrimary : COLORS.borderMuted
+      }`,
+      borderRadius: '6px', // same rounded-md look
+    }}
+  >
+    <select
+      value={tipSplitMethod}
+      onChange={e => setTipSplitMethod(e.target.value)}
+      className="w-full px-3 py-2 pr-8 rounded-md text-sm appearance-none focus:outline-none"
+      style={{
+        backgroundColor: '#111111',
+        color: COLORS.textBody,
+      }}
+    >
+      <option value="proportional">Split Proportionally</option>
+      <option value="equal">Split Equally</option>
+    </select>
+
+    {/* Custom dropdown arrow */}
+    <span
+      className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[18px]"
+      style={{ color: COLORS.textBody }}
+    >
+      expand_more
+    </span>
+  </div>
+</div>
+
+
+          {/* --- PAYMENT METHOD SELECTOR --- */}
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: COLORS.textBody }}
+            >
+              Payment Method
+            </label>
+
+            <div className="flex gap-3 mb-3 items-center">
+
+              {/* Venmo */}
+              <button
+                onClick={() => setSelectedPayment('venmo')}
+                className="p-2 rounded-md flex items-center justify-center transition-colors"
+                style={{
+                  border: `1px solid ${
+                    selectedPayment === 'venmo'
+                      ? COLORS.accentPrimary
+                      : COLORS.borderMuted
+                  }`,
+                  backgroundColor:
+                    selectedPayment === 'venmo' ? '#111111' : 'transparent',
+                }}
+              >
+                <VenmoIcon className="w-5 h-5" />
+              </button>
+
+              {/* Zelle */}
+              <button
+                onClick={() => setSelectedPayment('zelle')}
+                className="p-2 rounded-md flex items-center justify-center transition-colors"
+                style={{
+                  border: `1px solid ${
+                    selectedPayment === 'zelle'
+                      ? COLORS.accentPrimary
+                      : COLORS.borderMuted
+                  }`,
+                  backgroundColor:
+                    selectedPayment === 'zelle' ? '#111111' : 'transparent',
+                }}
+              >
+                <ZelleIcon className="w-5 h-5" />
+              </button>
+
+              {/* PayPal */}
+              <button
+                onClick={() => setSelectedPayment('paypal')}
+                className="p-2 rounded-md flex items-center justify-center transition-colors"
+                style={{
+                  border: `1px solid ${
+                    selectedPayment === 'paypal'
+                      ? COLORS.accentPrimary
+                      : COLORS.borderMuted
+                  }`,
+                  backgroundColor:
+                    selectedPayment === 'paypal' ? '#111111' : 'transparent',
+                }}
+              >
+                <PaypalIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Username Input */}
+            {selectedPayment && (
               <input
                 type="text"
-                placeholder="username"
-                value={venmoUsername}
-                onChange={(e) => handleVenmoUsernameChange(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                placeholder={`Your ${selectedPayment} username`}
+                value={paymentHandle}
+                onChange={e => {
+                  const value = e.target.value;
+                  setPaymentHandle(value);
+
+                  // keep your existing Venmo username logic working:
+                  if (selectedPayment === 'venmo') {
+                    handleVenmoUsernameChange(value);
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-md text-sm focus:outline-none"
+                style={{
+                  backgroundColor: '#111111',
+                  border: `1px solid ${
+                    paymentHandle ? COLORS.accentPrimary : COLORS.borderMuted
+                  }`,
+                  color: COLORS.textBody,
+                }}
               />
-            </div>
+            )}
           </div>
         </div>
+      </div>
+
+
 
         {/* View Summary Button */}
         {items.length > 0 && people.length > 0 && (
           <button
-            onClick={goToSummary}
-            className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition-colors shadow-lg"
-          >
-            View Summary
-          </button>
+          onClick={goToSummary}
+          className={primaryButtonClasses + " w-full py-4 text-lg"}
+          style={{
+            backgroundColor: COLORS.accentPrimary,
+            color: '#000000',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.backgroundColor = COLORS.accentHover;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.backgroundColor = COLORS.accentPrimary;
+          }}
+        >
+          View Summary
+        </button>
+          
         )}
       </div>
     </div>
+    </>
   );
 }
