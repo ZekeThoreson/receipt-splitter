@@ -613,7 +613,7 @@ export default function ReceiptSplitterApp() {
         setIsProcessing(false);
       }
     } catch (error) {
-      console.error('Veryfi Error:', error);
+      console.error('Veryfi Error:', error); 
       setOcrError('We couldn’t read this receipt. Try a clearer photo or add items manually.');
       setIsProcessing(false);
     }
