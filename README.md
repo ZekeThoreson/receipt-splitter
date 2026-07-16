@@ -1,3 +1,7 @@
+# Receipt Splitter
+
+Receipt Splitter is a web application designed to remove the friction, math, and social awkwardness from splitting group bills. By combining integrated receipt scanning, item-level assignment, and payment requests, the tool allows users to settle payments quickly without disrupting the moment.
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
